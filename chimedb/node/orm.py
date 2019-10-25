@@ -147,6 +147,11 @@ class NodeRMA(base_model):
     recv_time : datetime
         The time the RMA'd component was returned
     """
+    item = pw.ForeignKeyField(NodeItem, backref='mac')
+    number = pw.CharField(max_length=64, null=True)
+    company = pw.CharField(max_length=64, null=True)
+    send_time = pw.DateTimeField(default=datetime.datetime.now)
+    recv_time = pw.DateTimeField(null=True)
 
 class NodeHistory(base_model):
     """Notes and history for the node hardware tracker
