@@ -1,8 +1,6 @@
 """High-level API for modifying the Hardware tracking database
 """
-from .orm import (
-        NodeItem, NodeMAC, NodeAssembled, NodeHistory, NodeRMA,
-)
+from .orm import NodeItem, NodeMAC, NodeAssembled, NodeHistory, NodeRMA
 
 from enum import Enum
 
@@ -10,7 +8,7 @@ from enum import Enum
 # add to rack
 # remove from rack
 
-# add a component to node 
+# add a component to node
 # remove component from node (+ optional RMA)
 
 # change location of thing

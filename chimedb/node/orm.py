@@ -7,8 +7,10 @@ import peewee as pw
 import datetime
 
 import logging
+
 _logger = logging.getLogger("chimedb")
 _logger.addHandler(logging.NullHandler())
+
 
 class NodeItem(base_model):
     """A hardware component
@@ -35,11 +37,13 @@ class NodeItem(base_model):
     location : text
         Location of component (if not in a node)
     """
-    type = EnumField(['CPU', 'GPU', 'MB', 'NIC', 'RAM'], default='CPU')
+
+    type = EnumField(["CPU", "GPU", "MB", "NIC", "RAM"], default="CPU")
     model = pw.CharField(max_length=64, null=True)
     serial = pw.CharField(max_length=64, null=True)
-    status = EnumField(['OK', 'RMA', 'GONE'], default='OK')
+    status = EnumField(["OK", "RMA", "GONE"], default="OK")
     location = pw.TextField()
+
 
 class NodeMAC(base_model):
     """A MAC address record for a component.
@@ -58,15 +62,16 @@ class NodeMAC(base_model):
          - 'NIC3', the fourth NIC (motherboards only)
          - 'IPMI', the IPMI device (motherboards only)
     """
+
     value = pw.BigIntegerField(primary_key=True)
-    item = pw.ForeignKeyField(NodeItem, backref='mac')
-    mac_type = EnumField(['NIC0', 'NIC1', 'NIC2', 'NIC3', 'IPMI'], default='NIC0')
+    item = pw.ForeignKeyField(NodeItem, backref="mac")
+    mac_type = EnumField(["NIC0", "NIC1", "NIC2", "NIC3", "IPMI"], default="NIC0")
 
     class Meta:
         indexes = (
-                # item + type is unique
-                (('item', 'node_type'), True),
-                )
+            # item + type is unique
+            (("item", "node_type"), True),
+        )
 
 
 class NodeAssembled(base_model):
@@ -113,23 +118,25 @@ class NodeAssembled(base_model):
     location : text
         Location of node (if not in a rack)
     """
-    node_type = EnumField(['FRB', 'GPU'], default='GPU')
+
+    node_type = EnumField(["FRB", "GPU"], default="GPU")
     serial = pw.CharField(max_length=64)
-    rack_slot = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    motherboard = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    cpu0 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    cpu1 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    gpu0 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    gpu1 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    nic = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram0 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram1 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram2 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram3 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram4 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram5 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram6 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
-    ram7 = pw.ForeignKeyField(NodeItem, backref='node', unique=True, null=True)
+    rack_slot = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    motherboard = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    cpu0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    cpu1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    gpu0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    gpu1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    nic = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram2 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram3 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram4 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram5 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram6 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    ram7 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+
 
 class NodeRMA(base_model):
     """RMA data for a node component
@@ -147,11 +154,13 @@ class NodeRMA(base_model):
     recv_time : datetime
         The time the RMA'd component was returned
     """
-    item = pw.ForeignKeyField(NodeItem, backref='mac')
+
+    item = pw.ForeignKeyField(NodeItem, backref="mac")
     number = pw.CharField(max_length=64, null=True)
     company = pw.CharField(max_length=64, null=True)
     send_time = pw.DateTimeField(default=datetime.datetime.now)
     recv_time = pw.DateTimeField(null=True)
+
 
 class NodeHistory(base_model):
     """Notes and history for the node hardware tracker
@@ -181,7 +190,8 @@ class NodeHistory(base_model):
     note : text
         The note accompanying this change.
     """
-    operation = EnumField(['ADD', 'DEL', 'NOP'], default='NOP')
+
+    operation = EnumField(["ADD", "DEL", "NOP"], default="NOP")
     node = pw.ForeignKeyField(NodeAssembled, backref="history", null=True)
     item = pw.ForeignKeyField(NodeItem, backref="history", null=True)
     rma = pw.ForeignKeyField(NodeRMA, backref="history", null=True)
