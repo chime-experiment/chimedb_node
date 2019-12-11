@@ -3,16 +3,17 @@ Table definitions for the GPU node hardware tracker
 """
 from chimedb.core.orm import base_model, name_table, EnumField
 
-import peewee as pw
-import datetime
-
 import logging
+import datetime
+import peewee as pw
+
+from . import util
 
 _logger = logging.getLogger("chimedb")
 _logger.addHandler(logging.NullHandler())
 
 
-class NodeItem(base_model):
+class NodeComponent(base_model):
     """A hardware component
 
     Attributes
@@ -23,8 +24,6 @@ class NodeItem(base_model):
         - 'GPU'
         - 'MB': a motherboard
         - 'NIC'
-        - 'RAM'
-        - 'slot': a rack slot
     model : string
         The model of the component
     serial : string
@@ -38,11 +37,52 @@ class NodeItem(base_model):
         Location of component (if not in a node)
     """
 
-    type = EnumField(["CPU", "GPU", "MB", "NIC", "RAM"], default="CPU")
+    type = EnumField(["CPU", "GPU", "MB", "NIC"], default="CPU")
     model = pw.CharField(max_length=64, null=True)
     serial = pw.CharField(max_length=64, null=True)
     status = EnumField(["OK", "RMA", "GONE"], default="OK")
     location = pw.TextField()
+
+    def uninstall(location=None, note=None):
+        """Remove this component from a node.
+
+        The location of a removed component is set to <location>, if given.
+
+        The associated history entry uses <note>, if given."""
+        if self.type == "MB":
+            node = NodeAssembled.get_or_none(NodeAssembled.motherboard == self)
+            field = "motherboard"
+        elif self.type == "CPU":
+            try:
+                node = NodeAssembled.get(NodeAssembled.cpu0 == self)
+                field = "cpu0"
+            except DoesNotExist:
+                node = NodeAssembled.get_or_none(NodeAssembled.cpu1 == self)
+                field = "cpu1"
+        elif self.type == "GPU":
+            try:
+                node = NodeAssembled.get(NodeAssembled.gpu0 == self)
+                field = "gpu0"
+            except DoesNotExist:
+                node = NodeAssembled.get_or_none(NodeAssembled.gpu1 == self)
+                field = "gpu1"
+        elif self.type == "NIC":
+            node = NodeAssembled.get_or_none(NodeAssembled.nic == self)
+            field = "nic"
+        else:
+            node = None
+
+        if not node:
+            raise ValueError("component not installed in node.")
+
+        node.save()
+
+        setattr(node, field, None)
+        if location:
+            component.location = location
+            component.save()
+
+        history.del_(node=node, component=self, note=note)
 
 
 class NodeMAC(base_model):
@@ -52,90 +92,139 @@ class NodeMAC(base_model):
     ----------
     value : integer
         The MAC address.  This is the primary key
-    item : foreign key
+    component : foreign key
         The component for the MAC address
     mac_type : enum
          The MAC address type:
          - 'NIC0', the first NIC
          - 'NIC1', the second NIC (motherboards only)
-         - 'NIC2', the third NIC (motherboards only)
-         - 'NIC3', the fourth NIC (motherboards only)
+         - 'NIC2', the second NIC (motherboards only)
+         - 'NIC3', the third NIC (motherboards only)
+         - 'NIC4', the fourth NIC (motherboards only)
          - 'IPMI', the IPMI device (motherboards only)
     """
 
     value = pw.BigIntegerField(primary_key=True)
-    item = pw.ForeignKeyField(NodeItem, backref="mac")
-    mac_type = EnumField(["NIC0", "NIC1", "NIC2", "NIC3", "IPMI"], default="NIC0")
+    component = pw.ForeignKeyField(NodeComponent, backref="mac")
+    mac_type = EnumField(
+        ["NIC0", "NIC1", "NIC2", "NIC3", "NIC4", "IPMI"], default="NIC0"
+    )
 
     class Meta:
         indexes = (
-            # item + type is unique
-            (("item", "node_type"), True),
+            # component + type is unique
+            (("component", "mac_type"), True),
         )
 
 
-class NodeAssembled(base_model):
-    """Data for an assembled X-engine GPU node or FRB L1 node
+class NodeDIMM(base_model):
+    """RAM installed in a node
 
     Attributes
     ----------
-    node_type : enum
-        - 'FRB' for a FRB L1 node
-        - 'GPU' for a X-Engine GPU node
-    serial : string
-        The node serial number.
-    rack_slot : foreign key
-        Reference to a NodeRackSlock: the location of the node,
-        if installed
-    motherboard : foreign key
-        Reference to the installed NodeMotherboard
-    cpu0 : foreign key
-        Reference to the first installed NodeCPU
-    cpu1 : foreign key
-        Reference to the second installed NodeCPU (FRB L1 node only)
-    gpu0 : foreign key
-        Reference to the first installed NodeGPUBoard (X-Engine GPU node only)
-    gpu1 : foreign key
-        Reference to the second installed NodeGPUBoard (X-Engine GPU node only)
-    nic : foreign key
-        Reference to the installed NodeNIC (X-Engine GPU node only)
-    ram0 : foreign key
-        Reference to the first installed NodeRAM module
-    ram1 : foreign key
-        Reference to the second installed NodeRAM module
-    ram2 : foreign key
-        Reference to the third installed NodeRAM module
-    ram3 : foreign key
-        Reference to the fourth installed NodeRAM module
-    ram4 : foreign key
-        Reference to the fifth installed NodeRAM module
-    ram5 : foreign key
-        Reference to the sixth installed NodeRAM module
-    ram6 : foreign key
-        Reference to the seventh installed NodeRAM module
-    ram7 : foreign key
-        Reference to the eighth installed NodeRAM module
-    location : text
-        Location of node (if not in a rack)
+    value : integer
+        The amount of RAM in GB
+    slot : integer
+        The DIMM slot
+    node : foreign key
+        Referent to the associated NodeAssembled
     """
 
-    node_type = EnumField(["FRB", "GPU"], default="GPU")
-    serial = pw.CharField(max_length=64)
-    rack_slot = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    motherboard = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    cpu0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    cpu1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    gpu0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    gpu1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    nic = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram0 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram1 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram2 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram3 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram4 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram5 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram6 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
-    ram7 = pw.ForeignKeyField(NodeItem, backref="node", unique=True, null=True)
+    value = pw.IntegerField(default=0)
+    slot = pw.IntegerField(default=0)
+    node = pw.ForeignKeyField(NodeAssembled)
+
+    class Meta:
+        # Each node slot can only have one DIMM in it
+        indexes = ((("slot", "node"), True),)
+
+
+class NodeXEngine(base_model):
+    """X-Engine node-specific data
+
+    Attributes
+    ----------
+    base : foreign key
+        A reference to the generic NodeAssembled record
+    south : bool
+        True if installed in GPU-S, False if installed in GPU-N, NULL/None if not installed.
+    rack : integer
+        The rack number of an installed node (0-14)
+    slot : integer
+        The rack slot number of an installed node (0-9)
+    """
+
+    south = BooleanField(null=True)
+    rack = pw.Integer(null=True)
+    slot = pw.Integer(null=True)
+    base = pw.ForeignKeyField(NodeAssembled, backref="xengine", unique=True)
+
+    class Meta:
+        # Uniqueness of installed rack position
+        indexes = ((("south", "rack", "slot"), True),)
+
+
+class NodeL1(base_model):
+    """FRB L1 node-specific data
+
+    Attributes
+    ----------
+    base : foreign key
+        A reference to the generic NodeAssembled record
+    rack : integer
+        The rack number of an installed node (0-14)
+    slot : integer
+        The rack slot number of an installed node (0-9)
+    """
+
+    rack = pw.Integer(null=True)
+    slot = pw.Integer(null=True)
+    base = pw.ForeignKeyField(NodeAssembled, backref="xengine", unique=True)
+
+    class Meta:
+        # Uniqueness of installed rack position
+        indexes = ((("rack", "slot"), True),)
+
+
+class NodeAssembled(base_model):
+    """Common data for an assembled X-engine GPU node or FRB L1 node
+
+    Attributes
+    ----------
+    serial : string
+        The node serial number.
+    location : text
+        Location of node (if not in a rack)
+    gone : bool
+        True if this node no longer exists
+    """
+
+    serial = pw.CharField(max_length=64, unique=True)
+    location = pw.TextField(null=True)
+    gone = pw.BooleanField(default=False)
+
+    def components(self):
+        """A list of all components installed in this node."""
+        return NodeComponent.select().where(
+            NodeComponent.id.in_(
+                self.motherboard, self.cpu0, self.cpu1, self.gpu0, self.gpu1, self.nic
+            )
+        )
+
+    def empty(self, location=None, note=None):
+        """Remove all components from node.
+
+        The location of removed components are set to <location>
+        """
+        for item in ["motherboard", "cpu0", "cpu1", "gpu0", "gpu1", "nic"]:
+            component = getattr(self, item)
+            if component:
+                setattr(self, item, None)
+                component.location = location
+                component.save()
+                history.del_(node=self, component=component, note=note)
+
+        self.save()
 
 
 class NodeRMA(base_model):
@@ -143,7 +232,7 @@ class NodeRMA(base_model):
 
     Attributes
     ----------
-    item : foreign key
+    component : foreign key
         The RMA'd component
     number : string
         The RMA number
@@ -155,7 +244,7 @@ class NodeRMA(base_model):
         The time the RMA'd component was returned
     """
 
-    item = pw.ForeignKeyField(NodeItem, backref="mac")
+    component = pw.ForeignKeyField(NodeComponent, backref="mac")
     number = pw.CharField(max_length=64, null=True)
     company = pw.CharField(max_length=64, null=True)
     send_time = pw.DateTimeField(default=datetime.datetime.now)
@@ -170,18 +259,22 @@ class NodeHistory(base_model):
     operation : enum
         The operation performed:
         - 'ADD' :
-              = if `node` is NULL: add a new component
-              = otherwise: insert a component into `node`, or `node` into a rack
-        - 'DEL' : remove a component from a node, or a node from a rack
+              = if `node` is NULL: create a new component
+              = if `component` is NULL: create a new node
+              = otherwise: insert an component into `node`, or `node` into a rack
+        - 'DEL' :
               = if `node` is NULL: delete a component
-              = otherwise: remove a component from `node`, or `node` from a rack
+              = if `component` is NULL: delete a node
+              = otherwise: remove an component from `node`, or `node` from a rack
         - 'NOP' : no change, used to add notes without changing anything
     node : foreign key
         Referencing the NodeAssembled affected, if any
-    item : foreign key
-        Referencing the NodeItem affected, if any
+    component : foreign key
+        Referencing the NodeComponent affected, if any
     rma : foreign key
         Referencing the NodeRMA record, if any
+    author : string
+        Who made the note
     timestamp : datetime
         The timestamp of the record
     autonote : boolean
@@ -193,8 +286,9 @@ class NodeHistory(base_model):
 
     operation = EnumField(["ADD", "DEL", "NOP"], default="NOP")
     node = pw.ForeignKeyField(NodeAssembled, backref="history", null=True)
-    item = pw.ForeignKeyField(NodeItem, backref="history", null=True)
+    component = pw.ForeignKeyField(NodeComponent, backref="history", null=True)
     rma = pw.ForeignKeyField(NodeRMA, backref="history", null=True)
+    author = pw.CharField(max_length=64)
     timestamp = pw.DateTimeField(default=datetime.datetime.now)
     autonote = pw.BooleanField(default=True)
     note = pw.TextField()

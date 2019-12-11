@@ -27,10 +27,14 @@ setup(
     packages=["chimedb.node"],
     zip_safe=False,
     install_requires=[
-        "chimedb @ git+ssh://git@github.com/chime-experiment/chimedb.git",
+        "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
         "peewee > 3",
-        "future",
+        "click",
     ],
+    entry_points="""
+        [console_scripts]
+        nodedb=chimedb.node.client:entry
+    """,
     author="CHIME collaboration",
     author_email="dvw@phas.ubc.ca",
     description="CHIME GPU node hardware database",
